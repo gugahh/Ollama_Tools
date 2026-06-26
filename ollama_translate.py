@@ -7,9 +7,14 @@ import includes_python.srt_preprocess_tools as sptools
 import includes_python.srt_postprocess as srtpost
 
 # Configuration
-MODEL = "gemma4:e4b" #Até o momento, o melhor
+#MODEL = "gemma4:e4b" #Até o momento, o melhor
 #MODEL = "qcwind/qwen3-8b-instruct-Q4-K-M:latest" #Mais lento que o Gemma... qualidade similar.
 #MODEL = "phi4-mini" # Muito rapido, mas a qualidade e sofrivel. Bom para testes.
+#MODEL = "gemma3:4b" 
+MODEL = "gemma2:9b"  # Sugerido pela Gemini
+MODEL = "translategemma:4b" 
+
+
 
 SYSTEM_PROMPT_PADRAO = (
     "You are an expert subtitler. Translate the following movie dialogue into "
