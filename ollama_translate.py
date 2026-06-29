@@ -11,9 +11,10 @@ import includes_python.srt_postprocess as srtpost
 #MODEL = "qcwind/qwen3-8b-instruct-Q4-K-M:latest" #Mais lento que o Gemma... qualidade similar.
 #MODEL = "phi4-mini" # Muito rapido, mas a qualidade e sofrivel. Bom para testes.
 #MODEL = "gemma3:4b" 
-MODEL = "gemma2:9b"  # Sugerido pela Gemini
+#MODEL = "gemma2:9b"  # Sugerido pela Gemini
 MODEL = "translategemma:4b" 
 
+USAR_TRADUCAO_OTIMIZADA = 'N'
 
 
 SYSTEM_PROMPT_PADRAO = (
@@ -82,10 +83,6 @@ def process_subtitle(file_path, output_path, chunk_size=10):
 
         chunk = "\n\n".join(subtitles[i : i + chunk_size])
 
-        #Preprocessando o chunk: removendo timestamps para acelerar a traducao.
-        #Eles serao re-inseridos, apos a traducao deste chunk.
-        modded_text, arr_timestamps = sptools.fc_extract_timestamps(chunk)
-
         print(f"\n>> Traduzindo o chunk {current_chunk}/{total_chunks} ...\n")
         start_time = time.time()  # Armazenando a hora de inicio dessa iteracao
 
@@ -98,20 +95,28 @@ def process_subtitle(file_path, output_path, chunk_size=10):
         print(arr_timestamps)
         print('-----------------')
         '''
-        
-        translated_chunk = translate_srt_chunk(SYSTEM_PROMPT_PADRAO, modded_text)
+        traducao_otimiz_valida = False
 
-        # As vezes algum codigo maroto pode salvar erros de IA. Tipo repeticao de ### .
-        # Vamos tentar acertar, antes de declarar que essa traducao vai causar erro ou nao.
-        translated_chunk2 = srtpost.fc_remove_lixo_traducao(translated_chunk)
+        if (USAR_TRADUCAO_OTIMIZADA == 'N'):
 
-        # Verificando se a quantidade de ### eh igual a quantidade de timestamps,
-        # apos a traducao, que eh quando acontece erro (eventualmente).
-        # Se houver divergencia, a IA repetiu erradamente o ###, e temos que fazer
-        # a traducao convencional (mais lenta), usando timestamps.
-        traducao_valida = True if(translated_chunk2.count('###') == len(arr_timestamps)) else False
+            #Preprocessando o chunk: removendo timestamps para acelerar a traducao.
+            #Eles serao re-inseridos, apos a traducao deste chunk.
+            modded_text, arr_timestamps = sptools.fc_extract_timestamps(chunk)
 
-        if traducao_valida:
+            translated_chunk = translate_srt_chunk(SYSTEM_PROMPT_PADRAO, modded_text)
+
+            # As vezes algum codigo maroto pode salvar erros de IA. Tipo repeticao de ### .
+            # Vamos tentar acertar, antes de declarar que essa traducao vai causar erro ou nao.
+            translated_chunk2 = srtpost.fc_remove_lixo_traducao(translated_chunk)
+
+            # Verificando se a quantidade de ### eh igual a quantidade de timestamps,
+            # apos a traducao, que eh quando acontece erro (eventualmente).
+            # Se houver divergencia, a IA repetiu erradamente o ###, e temos que fazer
+            # a traducao convencional (mais lenta), usando timestamps.
+
+            traducao_otimiz_valida = True if(translated_chunk2.count('###') == len(arr_timestamps)) else False
+
+        if traducao_otimiz_valida:
             '''
             print('Imprimindo translated_chunk pre tratamento')
             print('-----------------')
@@ -135,12 +140,16 @@ def process_subtitle(file_path, output_path, chunk_size=10):
             # Fluxo alternativo: Sabe-se que essa traducao vai causar erro.
             # Vamos traduzir de novo esse chunk, e dessa vez vamos 
             # passar as legendas sem a substituicao de timestamps por ### 
-            print('**** Atencao: Erro na contagem de (###). Reprocessando esse bloco!')
+            if (USAR_TRADUCAO_OTIMIZADA == 'S'):
+                print('**** Atencao: Erro na contagem de (###). Reprocessando esse bloco!')
+                
             translated_chunk = translate_srt_chunk(SYSTEM_PROMPT_ALTERNATIVO, chunk)
             print('> Resultado da traducao:\n')
             print(translated_chunk)
             print('-----------------')
-            qt_blocos_reprocessados += 1
+
+            if (USAR_TRADUCAO_OTIMIZADA == 'S'):
+                qt_blocos_reprocessados += 1
             translated_content.append(translated_chunk)
             
         end_time = time.time()  # Hora do fim dessa iteracao
@@ -162,6 +171,32 @@ def process_subtitle(file_path, output_path, chunk_size=10):
     #Calculando o tempo total de todas as operacoes
     print(f'\n*** Quantidade de blocos reprocessados: {qt_blocos_reprocessados} ***')
     print(f'>>> Tradução finalizada em {formata_interv_hh_mm_ss(time.time() - start_total)}\n')
+
+def batchMode():
+    listaLegendas = [
+'Medium.S04E03.WEBRip.x264-FGT.srt',
+'Medium.S04E07.WEBRip.x264-FGT.srt',
+'Medium.S04E08.WEBRip.x264-FGT.srt',
+'Medium.S04E09.WEBRip.x264-FGT.srt',
+'Medium.S04E11.WEBRip.x264-FGT.srt',
+'Medium.S04E12.WEBRip.x264-FGT.srt',
+'Medium.S04E13.WEBRip.x264-FGT.srt',
+'Medium.S04E14.WEBRip.x264-FGT.srt',
+'Medium.S04E15.WEBRip.x264-FGT.srt'
+]
+    for file_path in listaLegendas:
+        print(f'Legenda a processar: {file_path}')
+        if not os.path.exists(file_path):
+            print(f"\n[ERRO] Arquivo nao encontrado: {file_path}")
+            print("Por favor verifique que o arquivo existe e o caminho esta correto.")
+            continue;
+        # Se chegou aqui, nome de arquivo esta OK.
+        # Nome do arquivo de saida: mesmo nome, so que com _pt-BR no final.
+        nome_arq_saida = f"{file_path[:-4]}_pt-BR.srt"
+        print(f"\tNome arq de saida:\t{nome_arq_saida}")
+
+        chunk_size = 10 #Chunk size padrao. Funciona bem no Gemma.
+        process_subtitle(file_path, nome_arq_saida , chunk_size) 
 
 def main():
     # print('Entrou em main()')
@@ -200,4 +235,5 @@ def main():
 
 if __name__ == "__main__":
     #print('Chegou da linha de comando')
-    main()
+    #main()
+    batchMode()
